@@ -102,10 +102,15 @@ jobs:
             --go-grpc_out=gateway/internal/pb --go-grpc_opt=paths=source_relative \
             proto/inference.proto
 
-      - name: Tidy, vet, test, build
+      - name: Verify go.mod and go.sum are tidy
         working-directory: gateway
         run: |
           go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Vet, test, build
+        working-directory: gateway
+        run: |
           go vet ./...
           go test -race ./...
           go build ./...

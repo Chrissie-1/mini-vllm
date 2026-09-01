@@ -13,8 +13,8 @@ RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.35.2 \
 WORKDIR /src
 
 # Dependencies first so edits to the source do not invalidate the module cache.
-COPY gateway/go.mod gateway/go.su[m] ./gateway/
-RUN cd gateway && go mod download || true
+COPY gateway/go.mod gateway/go.sum ./gateway/
+RUN cd gateway && go mod download
 
 COPY proto ./proto
 COPY gateway ./gateway
@@ -25,8 +25,7 @@ RUN protoc -I proto \
       proto/inference.proto
 
 WORKDIR /src/gateway
-RUN go mod tidy \
- && go vet ./... \
+RUN go vet ./... \
  && go test ./... \
  && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/gateway ./cmd/server
 

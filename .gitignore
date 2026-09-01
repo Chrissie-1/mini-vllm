@@ -5,9 +5,9 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
-# Generated protobuf bindings for Go are produced at build time.
+# Go protobuf bindings are generated at build time; go.sum is committed so
+# builds verify module checksums.
 gateway/internal/pb/*.pb.go
-gateway/go.sum
 
 # Local model cache
 .cache/
