@@ -116,13 +116,13 @@ Measured against a baseline that re-runs the whole sequence every step
 
 | Tokens | Cached | No cache | Cached tok/s | Naive tok/s | Speedup |
 |-------:|-------:|---------:|-------------:|------------:|--------:|
-| 16 | 0.38s | 1.56s | 41.9 | 10.3 | **4.08×** |
-| 32 | 0.71s | 3.64s | 45.1 | 8.8 | **5.13×** |
-| 64 | 1.39s | 10.30s | 46.1 | 6.2 | **7.42×** |
-| 128 | 3.12s | 33.22s | 41.1 | 3.9 | **10.65×** |
+| 16 | 0.38s | 1.67s | 42.6 | 9.6 | **4.45×** |
+| 32 | 0.69s | 4.02s | 46.3 | 8.0 | **5.82×** |
+| 64 | 1.34s | 11.84s | 47.6 | 5.4 | **8.80×** |
+| 128 | 2.90s | 33.20s | 44.1 | 3.9 | **11.44×** |
 
 The shape matters more than the headline number. Cached throughput is *flat* in
-sequence length (41–46 tok/s); the naive path degrades steadily (10.3 → 3.9
+sequence length (43–48 tok/s); the naive path degrades steadily (9.6 → 3.9
 tok/s). That divergence is the `O(n)`-vs-`O(n²)` signature, and it means the
 speedup keeps growing with longer generations.
 
@@ -166,21 +166,34 @@ Three tests pin this down, and they are the load-bearing ones in the suite:
 Throughput across batch-size limits (`python bench/bench_throughput.py`,
 16 concurrent requests × 32 tokens, gpt2, single-threaded CPU):
 
-| Max batch | Wall clock | Throughput | Mean batch | p50 | p95 | p99 | Speedup |
-|----------:|-----------:|-----------:|-----------:|----:|----:|----:|--------:|
-| 1 | 14.01s | 36.5 tok/s | 1.00 | 7.00s | 13.25s | 14.01s | **1.00×** |
-| 2 | 11.40s | 44.9 tok/s | 2.00 | 7.32s | 11.40s | 11.40s | **1.23×** |
-| 4 | 6.99s | 73.3 tok/s | 4.00 | 5.10s | 6.99s | 6.99s | **2.01×** |
-| 8 | 3.94s | 130.0 tok/s | 8.00 | 3.94s | 3.94s | 3.94s | **3.56×** |
-| 16 | 3.87s | 132.1 tok/s | 16.00 | 3.87s | 3.87s | 3.87s | **3.62×** |
+| Max batch | Wall clock | Throughput | Mean batch | p50 | p95 | p99 | Spread | Speedup |
+|----------:|-----------:|-----------:|-----------:|----:|----:|----:|-------:|--------:|
+| 1 | 16.01s | 32.0 tok/s | 1.00 | 8.33s | 14.71s | 16.01s | 20% | **1.00×** |
+| 2 | 14.59s | 35.1 tok/s | 2.00 | 10.12s | 14.59s | 14.59s | 27% | **1.10×** |
+| 4 | 6.42s | 79.8 tok/s | 4.00 | 4.85s | 6.41s | 6.41s | 31% | **2.50×** |
+| 8 | 5.12s | 100.0 tok/s | 8.00 | 5.12s | 5.12s | 5.12s | 19% | **3.13×** |
+| 16 | 3.31s | 154.6 tok/s | 16.00 | 3.31s | 3.31s | 3.31s | 18% | **4.83×** |
 
-**3.6×, not 8×.** Batching wins because a decode step costs about the same
-whether it advances one sequence or eight — the model weights are read from
-memory once either way. The gain flattens past batch 8 because a single CPU
-thread becomes compute-bound: at that point the weights are no longer the
-bottleneck, the matmuls are. On a GPU, where the memory-bandwidth headroom is far
-larger, this curve keeps climbing much further. Quoting 8× here would be quoting
-someone else's hardware.
+**4.8× at batch 16, not 8×.** Batching wins because a decode step costs about the
+same whether it advances one sequence or sixteen — the model weights are read
+from memory once either way. Quoting 8× here would be quoting someone else's
+hardware.
+
+Two honest caveats about these numbers, both of which the benchmark now handles.
+
+*Every figure is a median of three runs*, because run-to-run spread on a
+contended desktop reaches 31% (the `Spread` column). An earlier single-shot run
+of this same benchmark reported batch 2 as **slower** than no batching at all —
+a result that vanished under repetition. One timing run is not a measurement, and
+a benchmark that reports one is a way to publish noise as a finding.
+
+*Scaling from 1 to 2 is genuinely poor* (1.10×), while 2→4 is strong (2.3×).
+That is not noise: isolating `decode_step` shows a fixed cost of roughly 40 ms
+appearing the moment the batch exceeds one row, after which per-step cost is
+nearly flat (63 ms at batch 2, 90 ms at batch 8). Batch 1 takes a faster path
+inside the attention kernel, so the first row added pays an overhead that every
+subsequent row then amortises. It is why the curve is S-shaped rather than
+linear, and why a `max_batch_size` of 2 is the one setting never worth choosing.
 
 Note that latency *improves* too, rather than trading off against throughput.
 That is specific to a saturated server: requests finish sooner because they stop

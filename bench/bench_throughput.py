@@ -125,12 +125,25 @@ async def main_async(args) -> int:
 
     rows = []
     for limit in [int(b) for b in args.batches.split(",") if b.strip()]:
-        stats = await run_inprocess(engine, limit, args.concurrency, args.tokens)
+        # A single timing run on a contended desktop is not a measurement --
+        # spread across repeats here has been observed at +/-40%. Report the
+        # median so a stray scheduling hiccup cannot become a headline number.
+        reps = [
+            await run_inprocess(engine, limit, args.concurrency, args.tokens)
+            for _ in range(args.repeats)
+        ]
+        stats = min(
+            reps, key=lambda s: abs(s["elapsed"] - statistics.median(r["elapsed"] for r in reps))
+        )
+        stats["spread"] = (
+            max(r["elapsed"] for r in reps) - min(r["elapsed"] for r in reps)
+        ) / stats["elapsed"]
         rows.append((limit, stats))
         print(
             f"  batch<={limit:<2}  {stats['elapsed']:6.2f}s  "
             f"{stats['tokens'] / stats['elapsed']:7.1f} tok/s  "
-            f"mean batch {stats['mean_batch']:.2f}  steps {stats['steps']}",
+            f"mean batch {stats['mean_batch']:.2f}  steps {stats['steps']}  "
+            f"spread {stats['spread'] * 100:.0f}%",
             flush=True,
         )
     report(rows, args)
@@ -144,8 +157,14 @@ def report(rows, args):
         f"({args.model}, CPU)"
     )
     print()
-    print("| Max batch | Wall clock | Throughput | Mean batch | p50 | p95 | p99 | Speedup |")
-    print("|----------:|-----------:|-----------:|-----------:|----:|----:|----:|--------:|")
+    print(
+        "| Max batch | Wall clock | Throughput | Mean batch | p50 | p95 | p99 "
+        "| Spread | Speedup |"
+    )
+    print(
+        "|----------:|-----------:|-----------:|-----------:|----:|----:|----:"
+        "|-------:|--------:|"
+    )
 
     baseline = None
     for limit, stats in rows:
@@ -158,6 +177,7 @@ def report(rows, args):
         print(
             f"| {limit} | {stats['elapsed']:.2f}s | {throughput:.1f} tok/s | "
             f"{batch_str} | {p50:.2f}s | {p95:.2f}s | {p99:.2f}s | "
+            f"{stats.get('spread', 0) * 100:.0f}% | "
             f"**{throughput / baseline:.2f}x** |"
         )
 
@@ -180,6 +200,9 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--tokens", type=int, default=32)
     parser.add_argument("--batches", default="1,2,4,8")
+    parser.add_argument(
+        "--repeats", type=int, default=3, help="timing runs per batch size; median wins"
+    )
     parser.add_argument("--model", default=os.environ.get("MODEL_NAME", "gpt2"))
     parser.add_argument("--http", default="", help="POST to this URL instead")
     return asyncio.run(main_async(parser.parse_args()))
