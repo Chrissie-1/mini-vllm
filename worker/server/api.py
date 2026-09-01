@@ -110,7 +110,6 @@ async def completions(
         metrics.record_error("timeout")
         raise HTTPException(status_code=504, detail="generation timed out") from exc
 
-    metrics.record_result(result)
     return CompletionResponse(
         id=request_id,
         created=int(time.time()),

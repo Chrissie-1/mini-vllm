@@ -325,6 +325,12 @@ class DynamicBatcher:
             ttft_s=(seq.first_token_at or now) - req.submitted_at,
             total_s=now - req.submitted_at,
         )
+        # Recorded here rather than in the transports: this is the one point
+        # every request passes through regardless of how it arrived, so
+        # streaming and blocking calls are measured identically and neither can
+        # be double-counted.
+        metrics.record_result(result)
+
         if req.stream is not None:
             self._publish_final(req, result)
             req.stream.put_nowait(None)

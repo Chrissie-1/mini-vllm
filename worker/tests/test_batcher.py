@@ -80,13 +80,24 @@ async def test_latecomer_is_admitted_into_a_running_batch(batcher, engine):
     expected = engine.generate_with_kv_cache("def fibonacci(n):", max_new_tokens=8)
 
     long_running = asyncio.create_task(
-        batcher.submit("The capital of France is", SamplingParams(max_tokens=40))
+        batcher.submit("The capital of France is", SamplingParams(max_tokens=60))
     )
-    await asyncio.sleep(0.25)  # let the first request get well underway
+
+    # Synchronise on scheduler state rather than wall clock. A fixed sleep
+    # assumes the model is slow enough to still be generating, which is a
+    # property of the hardware and the checkpoint, not of the scheduler.
+    for _ in range(1000):
+        await asyncio.sleep(0.002)
+        if batcher.stats()["running"] >= 1:
+            break
+    assert batcher.stats()["running"] == 1, "first request never started"
+
     latecomer = await batcher.submit("def fibonacci(n):", SamplingParams(max_tokens=8))
 
     assert latecomer.text == expected
-    assert not long_running.done()  # it really was still running
+    # 60 tokens against the latecomer's 8: it cannot have finished, so the
+    # latecomer provably joined a batch that was already in flight.
+    assert not long_running.done()
     await long_running
 
 

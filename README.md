@@ -275,9 +275,16 @@ mini-vllm/
 
 ```bash
 make test          # or: cd worker && pytest -q ; cd gateway && go test ./...
+
+# Fast lane: a tiny randomly-initialised checkpoint, no 500 MB download.
+TEST_MODEL=hf-internal-testing/tiny-random-gpt2 pytest -q    # ~5s
 ```
 
-55 Python tests and 7 Go tests. The suite is built around equivalence rather than
+56 Python tests and 7 Go tests. `TEST_MODEL` swaps the checkpoint the suite runs
+against: every assertion is about engine mechanics -- cache surgery, batch
+invariance, stopping rules -- none of which depend on the weights being any good,
+so the tiny model exercises the same code paths in a twentieth of the time. CI
+runs both. The suite is built around equivalence rather than
 snapshots: fast paths are pinned against slow paths that are obviously correct,
 so an optimisation that changes behaviour fails loudly instead of silently
 producing different text.

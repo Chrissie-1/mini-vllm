@@ -124,3 +124,22 @@ def test_cache_hit_counters_advance_during_decoding(client):
     client.post("/v1/completions", json={"prompt": "Once upon a time", "max_tokens": 10})
     # Ten decode steps, each reusing every previously cached position.
     assert read("llm_kv_cache_reused_positions_total") > before
+
+
+def test_streaming_requests_are_recorded_in_metrics(client):
+    """Streaming used to bypass metrics entirely: it terminates in the scheduler,
+    not in the HTTP handler, so recording has to happen there."""
+
+    def latency_count():
+        for line in client.get("/metrics").text.splitlines():
+            if line.startswith("llm_latency_seconds_count "):
+                return float(line.split()[1])
+        return 0.0
+
+    before = latency_count()
+    payload = {"prompt": "Once upon a time", "max_tokens": 5, "stream": True}
+    with client.stream("POST", "/v1/completions", json=payload) as response:
+        for _ in response.iter_lines():
+            pass
+
+    assert latency_count() == before + 1

@@ -54,7 +54,6 @@ class InferenceServicer(inference_pb2_grpc.InferenceServicer):
             metrics.record_error("timeout")
             await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "generation timed out")
 
-        metrics.record_result(result)
         return inference_pb2.GenerateResponse(
             text=result.text,
             prompt_tokens=result.prompt_tokens,

@@ -19,8 +19,19 @@ env:
 
 jobs:
   worker:
-    name: worker (python)
+    name: worker (${{ matrix.label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Fast lane: a tiny randomly-initialised checkpoint. Exercises every
+          # code path in seconds, so a broken build fails before the download.
+          - { model: "hf-internal-testing/tiny-random-gpt2", label: "tiny" }
+          # Real weights, for the equivalence and benchmark assertions.
+          - { model: "gpt2", label: "gpt2" }
+    env:
+      TEST_MODEL: ${{ matrix.model }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +69,9 @@ jobs:
         run: pytest -q
 
       - name: Verify the KV cache is a pure optimisation
-        # Fails if cached and uncached decoding ever disagree.
+        # Fails if cached and uncached decoding ever disagree. Only meaningful
+        # against real weights.
+        if: matrix.model == 'gpt2'
         run: python bench/bench_kv_cache.py --tokens 16,32
 
   gateway:
