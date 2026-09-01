@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package inference;
+
+option go_package = "github.com/mini-vllm/gateway/internal/pb;pb";
+
+service Inference {
+  // Single-shot generation. The worker batches concurrent calls internally.
+  rpc Generate (GenerateRequest) returns (GenerateResponse);
+
+  // Token-by-token streaming of the same request.
+  rpc GenerateStream (GenerateRequest) returns (stream Token);
+
+  // Liveness + capacity probe used by the gateway's scheduler.
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message GenerateRequest {
+  string prompt = 1;
+  int32 max_tokens = 2;
+  float temperature = 3;
+  int32 top_k = 4;
+  float top_p = 5;
+  string request_id = 6;
+}
+
+message GenerateResponse {
+  string text = 1;
+  int32 prompt_tokens = 2;
+  int32 completion_tokens = 3;
+  string finish_reason = 4;
+  string request_id = 5;
+}
+
+message Token {
+  string text = 1;
+  int32 token_id = 2;
+  bool done = 3;
+  string finish_reason = 4;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+  string model = 2;
+  int32 running = 3;
+  int32 queued = 4;
+  int32 max_batch_size = 5;
+}
