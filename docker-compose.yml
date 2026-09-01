@@ -1,0 +1,86 @@
+# Full stack: gateway -> two workers, with Prometheus and Grafana watching.
+#
+# Two workers rather than one is the point of the exercise: the gateway routes
+# by least-in-flight across both, so scaling out is `--scale worker=N` and
+# nothing else changes.
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    image: mini-vllm-gateway:latest
+    ports:
+      - "8080:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      WORKER_ADDRS: "worker1:50051,worker2:50051"
+      MAX_INFLIGHT: "64"
+      REQUEST_TIMEOUT: "120s"
+      HEALTH_INTERVAL: "5s"
+    depends_on:
+      worker1:
+        condition: service_healthy
+      worker2:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker1: &worker
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: mini-vllm-worker:latest
+    environment:
+      MODEL_NAME: gpt2
+      MAX_BATCH_SIZE: "8"
+      BATCH_WINDOW_MS: "20"
+      MAX_QUEUE_SIZE: "256"
+      GRPC_PORT: "50051"
+      METRICS_PORT: "9100"
+      OMP_NUM_THREADS: "1"
+      TORCH_THREADS: "1"
+    healthcheck:
+      # The model takes a few seconds to load; the gateway waits for this.
+      test: ["CMD", "python", "-c", "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(s.connect_ex(('127.0.0.1',50051)))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  worker2:
+    <<: *worker
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  grafana-data:

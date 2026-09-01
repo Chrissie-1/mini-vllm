@@ -1,0 +1,5 @@
+# Variant that serves the FastAPI app directly, for running the worker
+# standalone (Phase 1/2) without the Go gateway in front of it.
+FROM mini-vllm-worker:latest
+EXPOSE 8000
+CMD ["uvicorn", "server.api:app", "--host", "0.0.0.0", "--port", "8000"]
