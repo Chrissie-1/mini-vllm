@@ -1,0 +1,13 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Generated protobuf bindings for Go are produced at build time.
+gateway/internal/pb/*.pb.go
+gateway/go.sum
+
+# Local model cache
+.cache/
