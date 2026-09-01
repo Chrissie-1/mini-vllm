@@ -2,7 +2,8 @@
 name = "mini-vllm-worker"
 version = "0.1.0"
 description = "KV-cached, continuously batched LLM inference worker"
-requires-python = ">=3.10"
+# numpy 2.5.x requires 3.12+; the pinned set cannot resolve below it.
+requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

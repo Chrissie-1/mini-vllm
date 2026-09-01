@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Model weights are baked in at build time so a container start does not depend
 # on the Hugging Face CDN, and so every replica serves byte-identical weights.
