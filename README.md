@@ -1,4 +1,4 @@
-# Mini-vLLM
+# Mini-vLLM — Hand-written KV cache, Go control plane
 
 A miniature LLM inference engine, built from the transformer forward pass up: a
 hand-written KV cache, a continuous-batching scheduler, a Go control plane
